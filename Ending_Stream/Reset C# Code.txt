@@ -1,0 +1,34 @@
+using System;
+using System.IO;
+using System.Text;
+
+public class CPHInline
+{
+    private const string DB_FILE = @"C:\Program Files\OBS-Studio\Files\Sources\Ending_Stream\End_Credits_Overlay\credits_db.txt";
+    private const string JS_FILE = @"C:\Program Files\OBS-Studio\Files\Sources\Ending_Stream\End_Credits_Overlay\credits_data.js";
+
+    public bool Execute()
+    {
+        try
+        {
+            string dbDir = Path.GetDirectoryName(DB_FILE);
+            if (!Directory.Exists(dbDir))
+                Directory.CreateDirectory(dbDir);
+
+            string jsDir = Path.GetDirectoryName(JS_FILE);
+            if (!Directory.Exists(jsDir))
+                Directory.CreateDirectory(jsDir);
+
+            File.WriteAllText(DB_FILE, "", Encoding.UTF8);
+            File.WriteAllText(JS_FILE, "window.CREDITS_DATA = [];", Encoding.UTF8);
+
+            CPH.LogInfo("Credits reset.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError("Credits reset error: " + ex.Message);
+            return false;
+        }
+    }
+}

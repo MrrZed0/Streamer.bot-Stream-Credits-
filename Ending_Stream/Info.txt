@@ -1,0 +1,85 @@
+4) How to use it in Streamer.bot
+
+For each trigger, use the same Add Credits Entry C# code and just set the eventType argument before the action runs.
+
+First Chat
+
+Set:
+
+eventType = chatFirst
+
+Recommended args available:
+
+targetUser
+targetUserProfileImageUrl
+Bits / Cheer
+
+Set:
+
+eventType = bits
+
+Recommended args:
+
+targetUser
+targetUserProfileImageUrl
+bits
+New Follower
+
+Set:
+
+eventType = follow
+
+Recommended args:
+
+targetUser
+targetUserProfileImageUrl
+Gifted Subs
+
+Set:
+
+eventType = gifted
+
+Recommended args:
+
+targetUser
+targetUserProfileImageUrl
+giftCount
+
+This will show the gifter and say something like:
+
+Gifted 5 Subs
+Subscriber
+
+Set:
+
+eventType = sub
+
+Recommended args:
+
+targetUser
+targetUserProfileImageUrl
+Raid
+
+Set:
+
+eventType = raid
+
+Recommended args:
+
+targetUser
+targetUserProfileImageUrl
+viewers
+
+This will show:
+
+Raided with 14
+Guest Star
+
+Set:
+
+eventType = guestStar
+Shared Chat
+
+Set:
+
+eventType = sharedChat

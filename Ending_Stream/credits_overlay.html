@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stream Credits Overlay</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #fff;
+    }
+
+    body {
+      position: relative;
+      background: transparent;
+    }
+
+    .credits-stage {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .vignette-top,
+    .vignette-bottom {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 180px;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .vignette-top {
+      top: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.97), rgba(0,0,0,0));
+    }
+
+    .vignette-bottom {
+      bottom: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.97), rgba(0,0,0,0));
+    }
+
+    .credits-scroll {
+      position: absolute;
+      left: 50%;
+      width: min(1450px, 92vw);
+      transform: translateX(-50%) translateY(100vh);
+      will-change: transform;
+      animation: creditsRoll 80s linear infinite;
+    }
+
+    @keyframes creditsRoll {
+      0% {
+        transform: translateX(-50%) translateY(100vh);
+      }
+      100% {
+        transform: translateX(-50%) translateY(-100%);
+      }
+    }
+
+    .credits-content {
+      padding: 140px 30px 220px;
+    }
+
+    .title {
+      text-align: center;
+      font-size: 78px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+      text-shadow:
+        0 0 12px rgba(255,255,255,0.18),
+        0 0 30px rgba(255,255,255,0.10),
+        0 6px 18px rgba(0,0,0,0.85);
+    }
+
+    .subtitle {
+      text-align: center;
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      color: rgba(255,255,255,0.88);
+      margin-bottom: 90px;
+      text-shadow: 0 3px 12px rgba(0,0,0,0.85);
+    }
+
+    .section {
+      margin: 0 0 95px 0;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      margin-bottom: 30px;
+    }
+
+    .section-icon {
+      font-size: 42px;
+      line-height: 1;
+      filter: drop-shadow(0 0 10px rgba(255,255,255,0.15));
+    }
+
+    .section-title {
+      font-size: 40px;
+      font-weight: 900;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      text-align: center;
+      text-shadow:
+        0 0 8px rgba(255,255,255,0.15),
+        0 3px 12px rgba(0,0,0,0.85);
+    }
+
+    .entries {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .entry {
+      display: grid;
+      grid-template-columns: 130px 1fr;
+      align-items: center;
+      gap: 28px;
+      min-height: 118px;
+      padding: 18px 24px;
+      border-radius: 24px;
+      background: rgba(0,0,0,0.40);
+      backdrop-filter: blur(4px);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.06),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+
+    .avatar-wrap {
+      width: 104px;
+      height: 104px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .avatar {
+      width: 104px;
+      height: 104px;
+      border-radius: 50%;
+      object-fit: cover;
+      display: block;
+      background: rgba(255,255,255,0.08);
+      box-shadow:
+        0 0 0 3px rgba(255,255,255,0.12),
+        0 0 18px rgba(255,255,255,0.10),
+        0 10px 24px rgba(0,0,0,0.55);
+    }
+
+    .text-wrap {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .name {
+      font-size: 40px;
+      font-weight: 900;
+      line-height: 1.08;
+      word-break: break-word;
+      text-shadow:
+        0 0 8px rgba(255,255,255,0.08),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+
+    .detail {
+      margin-top: 8px;
+      font-size: 24px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.86);
+      word-break: break-word;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.9);
+    }
+
+    .recipient-block {
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.06);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
+    }
+
+    .recipient-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.72);
+      margin-bottom: 8px;
+    }
+
+    .recipient-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 10px;
+    }
+
+    .recipient-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 18px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.95);
+      background: rgba(255,255,255,0.10);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.07),
+        0 2px 8px rgba(0,0,0,0.25);
+    }
+
+    .empty {
+      text-align: center;
+      font-size: 32px;
+      color: rgba(255,255,255,0.72);
+      margin-top: 100px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+    }
+
+    .glow-chatfirst .section-title,
+    .glow-chatfirst .section-icon,
+    .glow-chatfirst .name {
+      text-shadow:
+        0 0 10px rgba(0, 210, 255, 0.35),
+        0 0 22px rgba(0, 210, 255, 0.22),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+    .glow-chatfirst .entry {
+      box-shadow:
+        0 0 0 1px rgba(0,210,255,0.18),
+        0 0 22px rgba(0,210,255,0.12),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+
+    .glow-bits .section-title,
+    .glow-bits .section-icon,
+    .glow-bits .name {
+      text-shadow:
+        0 0 10px rgba(180, 80, 255, 0.35),
+        0 0 22px rgba(180, 80, 255, 0.22),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+    .glow-bits .entry {
+      box-shadow:
+        0 0 0 1px rgba(180,80,255,0.18),
+        0 0 22px rgba(180,80,255,0.14),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+
+    .glow-follow .section-title,
+    .glow-follow .section-icon,
+    .glow-follow .name {
+      text-shadow:
+        0 0 10px rgba(40, 255, 160, 0.35),
+        0 0 22px rgba(40, 255, 160, 0.22),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+    .glow-follow .entry {
+      box-shadow:
+        0 0 0 1px rgba(40,255,160,0.18),
+        0 0 22px rgba(40,255,160,0.14),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+
+    .glow-gifted .section-title,
+    .glow-gifted .section-icon,
+    .glow-gifted .name {
+      text-shadow:
+        0 0 10px rgba(255, 200, 50, 0.35),
+        0 0 22px rgba(255, 200, 50, 0.22),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+    .glow-gifted .entry {
+      box-shadow:
+        0 0 0 1px rgba(255,200,50,0.18),
+        0 0 22px rgba(255,200,50,0.14),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+
+    .glow-sub .section-title,
+    .glow-sub .section-icon,
+    .glow-sub .name {
+      text-shadow:
+        0 0 10px rgba(255, 90, 140, 0.35),
+        0 0 22px rgba(255, 90, 140, 0.22),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+    .glow-sub .entry {
+      box-shadow:
+        0 0 0 1px rgba(255,90,140,0.18),
+        0 0 22px rgba(255,90,140,0.14),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+
+    .glow-raid .section-title,
+    .glow-raid .section-icon,
+    .glow-raid .name {
+      text-shadow:
+        0 0 10px rgba(255, 80, 80, 0.35),
+        0 0 22px rgba(255, 80, 80, 0.22),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+    .glow-raid .entry {
+      box-shadow:
+        0 0 0 1px rgba(255,80,80,0.18),
+        0 0 22px rgba(255,80,80,0.14),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+
+    .glow-gueststar .section-title,
+    .glow-gueststar .section-icon,
+    .glow-gueststar .name {
+      text-shadow:
+        0 0 10px rgba(120, 180, 255, 0.35),
+        0 0 22px rgba(120, 180, 255, 0.22),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+    .glow-gueststar .entry {
+      box-shadow:
+        0 0 0 1px rgba(120,180,255,0.18),
+        0 0 22px rgba(120,180,255,0.14),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+
+    .glow-sharedchat .section-title,
+    .glow-sharedchat .section-icon,
+    .glow-sharedchat .name {
+      text-shadow:
+        0 0 10px rgba(80, 255, 220, 0.35),
+        0 0 22px rgba(80, 255, 220, 0.22),
+        0 3px 12px rgba(0,0,0,0.9);
+    }
+    .glow-sharedchat .entry {
+      box-shadow:
+        0 0 0 1px rgba(80,255,220,0.18),
+        0 0 22px rgba(80,255,220,0.14),
+        0 10px 30px rgba(0,0,0,0.45);
+    }
+  </style>
+</head>
+<body>
+  <div class="credits-stage">
+    <div class="vignette-top"></div>
+    <div class="vignette-bottom"></div>
+
+    <div class="credits-scroll" id="creditsScroll">
+      <div class="credits-content" id="creditsContent">
+        <div class="title">Stream Credits</div>
+        <div class="subtitle">Thanks for all the love and support</div>
+        <div class="empty">Waiting for credits data...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.CREDITS_DATA = window.CREDITS_DATA || [];
+  </script>
+  <script src="credits_data.js"></script>
+
+  <script>
+    const sectionConfig = {
+      chatfirst: { title: "First Chatters", icon: "💬" },
+      bits: { title: "Cheers / Bits", icon: "✨" },
+      follow: { title: "New Followers", icon: "❤" },
+      gifted: { title: "Gifted Subs", icon: "🎁" },
+      sub: { title: "Subscribers", icon: "⭐" },
+      raid: { title: "Raids", icon: "⚡" },
+      gueststar: { title: "Guest Stars", icon: "🎬" },
+      sharedchat: { title: "Shared Chat", icon: "🌐" }
+    };
+
+    const sectionOrder = [
+      "chatfirst",
+      "bits",
+      "follow",
+      "gifted",
+      "sub",
+      "raid",
+      "gueststar",
+      "sharedchat"
+    ];
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function groupCredits(items) {
+      const grouped = {
+        chatfirst: [],
+        bits: [],
+        follow: [],
+        gifted: [],
+        sub: [],
+        raid: [],
+        gueststar: [],
+        sharedchat: []
+      };
+
+      for (const item of items) {
+        if (!item || !item.type || !grouped[item.type]) continue;
+        grouped[item.type].push(item);
+      }
+
+      return grouped;
+    }
+
+    function renderRecipients(recipients) {
+      if (!Array.isArray(recipients) || !recipients.length) return "";
+
+      const pills = recipients
+        .filter(x => String(x || "").trim() !== "")
+        .map(name => `<span class="recipient-pill">${escapeHtml(name)}</span>`)
+        .join("");
+
+      if (!pills) return "";
+
+      return `
+        <div class="recipient-block">
+          <div class="recipient-title">Recipients</div>
+          <div class="recipient-list">${pills}</div>
+        </div>
+      `;
+    }
+
+    function entryHtml(item) {
+      const userName = escapeHtml(item.userName || "Unknown User");
+      const profileImage = escapeHtml(item.profileImage || "");
+      const detail = escapeHtml(item.detail || "");
+      const recipientsHtml = renderRecipients(item.recipients);
+
+      return `
+        <div class="entry">
+          <div class="avatar-wrap">
+            <img class="avatar" src="${profileImage}" alt="${userName}" onerror="this.style.visibility='hidden';" />
+          </div>
+          <div class="text-wrap">
+            <div class="name">${userName}</div>
+            ${detail ? `<div class="detail">${detail}</div>` : ``}
+            ${recipientsHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    function buildHtml(grouped) {
+      let html = `
+        <div class="title">Stream Credits</div>
+        <div class="subtitle">Thanks for all the love and support</div>
+      `;
+
+      let hasAny = false;
+
+      for (const key of sectionOrder) {
+        const items = grouped[key];
+        if (!items || !items.length) continue;
+
+        hasAny = true;
+        const cfg = sectionConfig[key];
+
+        html += `
+          <div class="section glow-${key}">
+            <div class="section-header">
+              <div class="section-icon">${cfg.icon}</div>
+              <div class="section-title">${escapeHtml(cfg.title)}</div>
+            </div>
+            <div class="entries">
+              ${items.map(entryHtml).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      if (!hasAny) {
+        html += `<div class="empty">No credits found.</div>`;
+      }
+
+      return html;
+    }
+
+    function updateDuration() {
+      const scroll = document.getElementById("creditsScroll");
+      const content = document.getElementById("creditsContent");
+
+      const totalDistance = content.scrollHeight + window.innerHeight;
+      const pxPerSecond = 62;
+      const duration = Math.max(40, Math.round(totalDistance / pxPerSecond));
+
+      scroll.style.animation = "none";
+      void scroll.offsetHeight;
+      scroll.style.animation = `creditsRoll ${duration}s linear infinite`;
+    }
+
+    function renderCredits() {
+      const items = Array.isArray(window.CREDITS_DATA) ? window.CREDITS_DATA : [];
+      const grouped = groupCredits(items);
+
+      const content = document.getElementById("creditsContent");
+      content.innerHTML = buildHtml(grouped);
+
+      updateDuration();
+    }
+
+    window.addEventListener("resize", updateDuration);
+    renderCredits();
+  </script>
+</body>
+</html>

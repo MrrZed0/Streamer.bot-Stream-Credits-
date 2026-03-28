@@ -1,0 +1,606 @@
+using System;
+using System.IO;
+using System.Text;
+using System.Collections.Generic;
+
+public class CPHInline
+{
+    private const string DB_FILE = @"C:\Program Files\OBS-Studio\Files\Sources\Ending_Stream\End_Credits_Overlay\credits_db.txt";
+    private const string JS_FILE = @"C:\Program Files\OBS-Studio\Files\Sources\Ending_Stream\End_Credits_Overlay\credits_data.js";
+
+    public bool Execute()
+    {
+        try
+        {
+            string eventType = GetArg("eventType", "");
+            if (string.IsNullOrWhiteSpace(eventType))
+            {
+                CPH.LogWarn("Missing required arg: eventType");
+                return false;
+            }
+
+            string normalizedType = NormalizeType(eventType);
+            if (string.IsNullOrWhiteSpace(normalizedType))
+            {
+                CPH.LogWarn("Invalid eventType: " + eventType);
+                return false;
+            }
+
+            EnsureFilesExist();
+
+            List<CreditEntry> entries = LoadEntries();
+
+            string userName = GetBestUserName(normalizedType);
+            string profileImage = GetBestProfileImage(normalizedType);
+            string detail = BuildDetail(normalizedType);
+            List<string> newRecipients = BuildRecipientsList(normalizedType);
+
+            if (string.IsNullOrWhiteSpace(userName))
+            {
+                CPH.LogWarn("Could not determine username.");
+                return false;
+            }
+
+            if (normalizedType == "gifted")
+            {
+                UpsertGiftedEntry(entries, userName, profileImage, detail, newRecipients);
+            }
+            else
+            {
+                UpsertRegularEntry(entries, normalizedType, userName, profileImage, detail);
+            }
+
+            SaveEntries(entries);
+            WriteJs(entries);
+
+            CPH.LogInfo("Credits updated successfully.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError("Credits add error: " + ex.Message);
+            return false;
+        }
+    }
+
+    private void EnsureFilesExist()
+    {
+        string dbDir = Path.GetDirectoryName(DB_FILE);
+        if (!Directory.Exists(dbDir))
+            Directory.CreateDirectory(dbDir);
+
+        string jsDir = Path.GetDirectoryName(JS_FILE);
+        if (!Directory.Exists(jsDir))
+            Directory.CreateDirectory(jsDir);
+
+        if (!File.Exists(DB_FILE))
+            File.WriteAllText(DB_FILE, "", Encoding.UTF8);
+
+        if (!File.Exists(JS_FILE))
+            File.WriteAllText(JS_FILE, "window.CREDITS_DATA = [];", Encoding.UTF8);
+    }
+
+    private List<CreditEntry> LoadEntries()
+    {
+        List<CreditEntry> entries = new List<CreditEntry>();
+
+        if (!File.Exists(DB_FILE))
+            return entries;
+
+        string[] lines = File.ReadAllLines(DB_FILE, Encoding.UTF8);
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            string[] parts = line.Split('|');
+            if (parts.Length < 5)
+                continue;
+
+            CreditEntry entry = new CreditEntry();
+            entry.Type = parts[0];
+            entry.UserName = parts[1];
+            entry.ProfileImage = parts[2];
+            entry.Detail = parts[3];
+            entry.Recipients = ParseRecipientsCsv(parts[4]);
+
+            entries.Add(entry);
+        }
+
+        return entries;
+    }
+
+    private void SaveEntries(List<CreditEntry> entries)
+    {
+        StringBuilder sb = new StringBuilder();
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            CreditEntry e = entries[i];
+
+            string line =
+                SanitizePipe(e.Type) + "|" +
+                SanitizePipe(e.UserName) + "|" +
+                SanitizePipe(e.ProfileImage) + "|" +
+                SanitizePipe(e.Detail) + "|" +
+                SanitizePipe(RecipientsToCsv(e.Recipients));
+
+            sb.AppendLine(line);
+        }
+
+        File.WriteAllText(DB_FILE, sb.ToString(), Encoding.UTF8);
+    }
+
+    private void WriteJs(List<CreditEntry> entries)
+    {
+        StringBuilder sb = new StringBuilder();
+        sb.AppendLine("window.CREDITS_DATA = [");
+
+        for (int i = 0; i < entries.Count; i++)
+        {
+            CreditEntry e = entries[i];
+
+            sb.Append("  {");
+            sb.Append("\"type\":\"").Append(EscapeJson(e.Type)).Append("\",");
+            sb.Append("\"userName\":\"").Append(EscapeJson(e.UserName)).Append("\",");
+            sb.Append("\"profileImage\":\"").Append(EscapeJson(e.ProfileImage)).Append("\",");
+            sb.Append("\"detail\":\"").Append(EscapeJson(e.Detail)).Append("\",");
+            sb.Append("\"recipients\":[");
+
+            for (int r = 0; r < e.Recipients.Count; r++)
+            {
+                if (r > 0)
+                    sb.Append(",");
+
+                sb.Append("\"").Append(EscapeJson(e.Recipients[r])).Append("\"");
+            }
+
+            sb.Append("]}");
+
+            if (i < entries.Count - 1)
+                sb.Append(",");
+
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("];");
+
+        File.WriteAllText(JS_FILE, sb.ToString(), Encoding.UTF8);
+    }
+
+    private void UpsertRegularEntry(List<CreditEntry> entries, string type, string userName, string profileImage, string detail)
+    {
+        bool dedupe = type == "chatfirst" || type == "follow" || type == "sub";
+
+        if (dedupe)
+        {
+            for (int i = 0; i < entries.Count; i++)
+            {
+                CreditEntry existing = entries[i];
+                if (EqualsIgnoreCase(existing.Type, type) && EqualsIgnoreCase(existing.UserName, userName))
+                {
+                    return;
+                }
+            }
+        }
+
+        CreditEntry entry = new CreditEntry();
+        entry.Type = type;
+        entry.UserName = userName;
+        entry.ProfileImage = profileImage;
+        entry.Detail = detail;
+        entry.Recipients = new List<string>();
+
+        entries.Add(entry);
+    }
+
+    private void UpsertGiftedEntry(List<CreditEntry> entries, string userName, string profileImage, string detail, List<string> newRecipients)
+    {
+        for (int i = 0; i < entries.Count; i++)
+        {
+            CreditEntry existing = entries[i];
+
+            if (EqualsIgnoreCase(existing.Type, "gifted") && EqualsIgnoreCase(existing.UserName, userName))
+            {
+                if (!string.IsNullOrWhiteSpace(profileImage))
+                    existing.ProfileImage = profileImage;
+
+                MergeRecipients(existing.Recipients, newRecipients);
+
+                int recipientCount = existing.Recipients.Count;
+                if (recipientCount > 0)
+                {
+                    existing.Detail = "Gifted " + recipientCount + " Subs";
+                }
+                else
+                {
+                    int oldCount = ExtractFirstNumber(existing.Detail);
+                    int newCount = ExtractFirstNumber(detail);
+                    int total = oldCount + newCount;
+
+                    if (total <= 0)
+                        total = 1;
+
+                    existing.Detail = "Gifted " + total + " Subs";
+                }
+
+                return;
+            }
+        }
+
+        CreditEntry entry = new CreditEntry();
+        entry.Type = "gifted";
+        entry.UserName = userName;
+        entry.ProfileImage = profileImage;
+        entry.Detail = detail;
+        entry.Recipients = new List<string>();
+
+        MergeRecipients(entry.Recipients, newRecipients);
+
+        if (entry.Recipients.Count > 0)
+            entry.Detail = "Gifted " + entry.Recipients.Count + " Subs";
+        else if (ExtractFirstNumber(entry.Detail) <= 0)
+            entry.Detail = "Gifted 1 Subs";
+
+        entries.Add(entry);
+    }
+
+    private void MergeRecipients(List<string> target, List<string> source)
+    {
+        for (int i = 0; i < source.Count; i++)
+        {
+            string name = source[i];
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            bool exists = false;
+            for (int j = 0; j < target.Count; j++)
+            {
+                if (EqualsIgnoreCase(target[j], name))
+                {
+                    exists = true;
+                    break;
+                }
+            }
+
+            if (!exists)
+                target.Add(name);
+        }
+    }
+
+    private List<string> BuildRecipientsList(string eventType)
+    {
+        List<string> list = new List<string>();
+
+        if (eventType != "gifted")
+            return list;
+
+        string[] candidateArgs = new string[]
+        {
+            "recipientUsers",
+            "recipientUserNames",
+            "giftRecipients",
+            "recipients",
+            "recipientList"
+        };
+
+        for (int i = 0; i < candidateArgs.Length; i++)
+        {
+            string raw = GetArg(candidateArgs[i], "");
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                List<string> parsed = ParseFlexibleNames(raw);
+                MergeRecipients(list, parsed);
+            }
+        }
+
+        string singleRecipient = GetArg("recipientUser", "");
+        if (string.IsNullOrWhiteSpace(singleRecipient))
+            singleRecipient = GetArg("recipient", "");
+
+        if (!string.IsNullOrWhiteSpace(singleRecipient))
+        {
+            List<string> one = new List<string>();
+            one.Add(singleRecipient.Trim());
+            MergeRecipients(list, one);
+        }
+
+        return list;
+    }
+
+    private List<string> ParseFlexibleNames(string raw)
+    {
+        List<string> list = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(raw))
+            return list;
+
+        string cleaned = raw
+            .Replace("\r", ",")
+            .Replace("\n", ",")
+            .Replace(";", ",")
+            .Replace("|", ",");
+
+        string[] split = cleaned.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+        for (int i = 0; i < split.Length; i++)
+        {
+            string name = split[i].Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+                list.Add(name);
+        }
+
+        return list;
+    }
+
+    private List<string> ParseRecipientsCsv(string csv)
+    {
+        List<string> list = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(csv))
+            return list;
+
+        string[] split = csv.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+        for (int i = 0; i < split.Length; i++)
+        {
+            string name = split[i].Trim();
+            if (!string.IsNullOrWhiteSpace(name))
+                list.Add(name);
+        }
+
+        return list;
+    }
+
+    private string RecipientsToCsv(List<string> recipients)
+    {
+        if (recipients == null || recipients.Count == 0)
+            return "";
+
+        StringBuilder sb = new StringBuilder();
+
+        for (int i = 0; i < recipients.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(",");
+
+            sb.Append(recipients[i]);
+        }
+
+        return sb.ToString();
+    }
+
+    private int ExtractFirstNumber(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return 0;
+
+        StringBuilder digits = new StringBuilder();
+
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c >= '0' && c <= '9')
+                digits.Append(c);
+            else if (digits.Length > 0)
+                break;
+        }
+
+        if (digits.Length == 0)
+            return 0;
+
+        int value;
+        if (int.TryParse(digits.ToString(), out value))
+            return value;
+
+        return 0;
+    }
+
+    private string NormalizeType(string value)
+    {
+        string v = (value ?? "").Trim().ToLower();
+
+        if (v == "chatfirst" || v == "firstchat" || v == "first_chatter")
+            return "chatfirst";
+        if (v == "bits" || v == "cheer" || v == "cheered")
+            return "bits";
+        if (v == "follow" || v == "follower" || v == "newfollower")
+            return "follow";
+        if (v == "gifted" || v == "giftedsub" || v == "giftedsubs")
+            return "gifted";
+        if (v == "sub" || v == "subscriber" || v == "subscribed")
+            return "sub";
+        if (v == "raid" || v == "raided")
+            return "raid";
+        if (v == "gueststar" || v == "guest_star")
+            return "gueststar";
+        if (v == "sharedchat" || v == "shared_chat")
+            return "sharedchat";
+
+        return "";
+    }
+
+    private string BuildDetail(string eventType)
+    {
+        if (eventType == "bits")
+        {
+            string bitsValue = GetArg("bits", "");
+            if (string.IsNullOrWhiteSpace(bitsValue))
+                bitsValue = GetArg("amount", "");
+            if (string.IsNullOrWhiteSpace(bitsValue))
+                bitsValue = GetArg("cheerAmount", "");
+            if (string.IsNullOrWhiteSpace(bitsValue))
+                bitsValue = GetArg("messageBits", "");
+
+            if (!string.IsNullOrWhiteSpace(bitsValue))
+                return bitsValue + " Bits";
+
+            return "Cheered Bits";
+        }
+
+        if (eventType == "gifted")
+        {
+            string giftCount = GetArg("giftCount", "");
+            if (string.IsNullOrWhiteSpace(giftCount))
+                giftCount = GetArg("count", "");
+            if (string.IsNullOrWhiteSpace(giftCount))
+                giftCount = GetArg("subsGifted", "");
+            if (string.IsNullOrWhiteSpace(giftCount))
+                giftCount = GetArg("totalGifted", "");
+
+            if (!string.IsNullOrWhiteSpace(giftCount))
+                return "Gifted " + giftCount + " Subs";
+
+            return "Gifted 1 Subs";
+        }
+
+        if (eventType == "sub")
+            return "Subscribed";
+
+        if (eventType == "follow")
+            return "New Follower";
+
+        if (eventType == "chatfirst")
+            return "First Chat";
+
+        if (eventType == "raid")
+        {
+            string viewers = GetArg("viewers", "");
+            if (string.IsNullOrWhiteSpace(viewers))
+                viewers = GetArg("raidViewers", "");
+            if (string.IsNullOrWhiteSpace(viewers))
+                viewers = GetArg("viewerCount", "");
+
+            if (!string.IsNullOrWhiteSpace(viewers))
+                return "Raided with " + viewers;
+
+            return "Raid";
+        }
+
+        if (eventType == "gueststar")
+            return "Guest Star";
+
+        if (eventType == "sharedchat")
+            return "Shared Chat";
+
+        return "";
+    }
+
+    private string GetBestUserName(string eventType)
+    {
+        string value;
+
+        if (eventType == "gifted")
+        {
+            value = GetArg("gifterUser", "");
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+
+            value = GetArg("gifterUserName", "");
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+
+            value = GetArg("fromUser", "");
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+        }
+
+        value = GetArg("targetUser", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        value = GetArg("userName", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        value = GetArg("fromUser", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        value = GetArg("displayName", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        value = GetArg("login", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        return "Unknown User";
+    }
+
+    private string GetBestProfileImage(string eventType)
+    {
+        string value;
+
+        if (eventType == "gifted")
+        {
+            value = GetArg("gifterProfileImageUrl", "");
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+
+            value = GetArg("gifterUserProfileImageUrl", "");
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+
+            value = GetArg("fromUserProfileImageUrl", "");
+            if (!string.IsNullOrWhiteSpace(value)) return value;
+        }
+
+        value = GetArg("targetUserProfileImageUrl", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        value = GetArg("userProfileImageUrl", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        value = GetArg("profileImageUrl", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        value = GetArg("fromUserProfileImageUrl", "");
+        if (!string.IsNullOrWhiteSpace(value)) return value;
+
+        return "https://static-cdn.jtvnw.net/jtv_user_pictures/xarth/404_user_70x70.png";
+    }
+
+    private string GetArg(string name, string fallback)
+    {
+        string value;
+        if (CPH.TryGetArg(name, out value) && value != null)
+            return value.Trim();
+
+        object obj;
+        if (args != null && args.TryGetValue(name, out obj) && obj != null)
+            return obj.ToString().Trim();
+
+        return fallback;
+    }
+
+    private bool EqualsIgnoreCase(string a, string b)
+    {
+        return string.Equals(a ?? "", b ?? "", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string SanitizePipe(string input)
+    {
+        if (input == null)
+            return "";
+
+        return input
+            .Replace("\r", " ")
+            .Replace("\n", " ")
+            .Replace("|", "/")
+            .Trim();
+    }
+
+    private string EscapeJson(string input)
+    {
+        if (input == null)
+            return "";
+
+        return input
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\r", " ")
+            .Replace("\n", " ");
+    }
+
+    private class CreditEntry
+    {
+        public string Type = "";
+        public string UserName = "";
+        public string ProfileImage = "";
+        public string Detail = "";
+        public List<string> Recipients = new List<string>();
+    }
+}
