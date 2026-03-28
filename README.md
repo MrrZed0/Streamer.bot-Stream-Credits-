@@ -6,6 +6,9 @@ Display your community activity as **rolling Hollywood-style credits** at the en
 
 ---
 
+![Image](https://github.com/MrrZed0/Streamer.bot-Stream-Credits-/blob/main/1.png?raw=true)
+![Image](https://github.com/MrrZed0/Streamer.bot-Stream-Credits-/blob/main/2.png?raw=true)
+
 # ✨ Features
 
 * 🎬 Cinematic rolling credits (movie style)
